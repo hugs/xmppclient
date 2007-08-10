@@ -1,7 +1,7 @@
 from twisted.words.protocols.jabber import client
 from twisted.words.protocols.jabber import xmlstream as jxml
 from twisted.words.xish.xpath import XPathQuery
-from twisted.words.xish import domish
+from twisted.words.xish import domish, utility
 from twisted.python import log
 from utils import presenceStanza, messageStanza, updateAttribsFromDict, FEATURE_NOT_IMPLEMENTED
 from twisted.internet import interfaces
@@ -14,25 +14,14 @@ class Disco:
         self.identities = [{'category': category, 'type': type}]
         self.nodes = {}
         self._entity = entity
-        #self._entity.register(self)
-        #self._entity.addIqHook(DISCO_INFO, self.discoInfo)
-        self._entity.iq_get_hooks.addXPathHook(xpaths.DISCO_INFO, self.discoInfo)
-        self._entity.iq_get_hooks.addXPathHook(xpaths.DISCO_ITEMS, self.discoItems)
-
-    #    def xaddObservers(self, xmlstream):
-    #        self._xmlstream = xmlstream
-    #        xmlstream.addObserver(xpaths.DISCO_INFO, self.discoInfo)
-    #        xmlstream.addObserver(xpaths.DISCO_ITEMS, self.discoItems)
-    #        #for node in self.nodes:
-    #        #    self.nodes[node].addObservers(xmlstream)
+        self._entity.iq_get_hooks.addObserver(xpaths.DISCO_INFO, self.discoInfo)
+        self._entity.iq_get_hooks.addObserver(xpaths.DISCO_ITEMS, self.discoItems)
 
     def discoInfo(self, iq):
         node = iq.query.getAttribute('node')
         if node:
             if node in self.nodes: # we know about this node
                 return self.nodes[node].discoInfo(self, iq)
-        log.msg("discoInfo")
-        #log.msg(iq.toXml())
         iq.swapAttributeValues('from', 'to')
         iq['type'] = 'result'
         iq.children = []
@@ -46,7 +35,6 @@ class Disco:
         for f in self._features:
             queryFeat = q.addElement("feature", None, "")
             queryFeat['var'] = f
-        #log.msg("sending:"+iq.toXml())
         self._entity._xmlstream.send(iq)
 
     def iteritems(self):
@@ -54,7 +42,6 @@ class Disco:
             yield i
 
     def discoItems(self, iq):
-        log.msg("discoItems")
         node = iq.query.getAttribute('node')
         if node:
             if node in self.nodes:
@@ -135,41 +122,14 @@ class IdleMixin:
     def extended_away(self):
         self.setStatus(showText='xa')
 
-class EventHooks:
-    def __init__(self):
-        self.xpath_hooks = {} # hooks for xpath queries
-        self.hooks = [] # callbacks for *any* event
-    def addXPathHook(self, xpath_query, callback):
-        self.xpath_hooks[(xpath_query, callback)] = XPathQuery(xpath_query), callback
-    def addHook(self, callback):
-        if callback not in self.hooks:
-            self.hooks.append(callback)
-    def removeXPathHook(self, xpath_query, callback):
-        if (xpath_query, callback) in self.xpath_hooks:
-            del self.xpath_hooks[(xpath_query, callback)]
-    def removeHook(self, callback):
-        if callback in self.hooks:
-            self.hooks.remove(callback)
-    def notifyEvent(self, xml_fragment, xml_report):
-        "Calls the callbacks which match"
-        for c in self.hooks:
-            # firstly, the 'wildcard' hooks
-            c(xml_report)
-        found_match = False
-        for key, value in self.xpath_hooks.iteritems():
-            if value[0].matches(xml_fragment):
-                found_match = True
-                value[1](xml_report)
-        return found_match
-
-class BasicJabberClient:
+class BasicJabberClient(utility.EventDispatcher):
     def __init__(self, myJID, myPassword, identity_type):
+        utility.EventDispatcher.__init__(self)
         self._xmlstream = None
-        self.iq_get_hooks = EventHooks()
-        self.iq_set_hooks = EventHooks()
-        self.message_hooks = EventHooks()
+        self.iq_get_hooks = utility.EventDispatcher()
+        self.iq_set_hooks = utility.EventDispatcher()
+        self.message_hooks = utility.EventDispatcher()
         
-        self.observers = []
         self.disco = Disco(self, 'client', identity_type)
         self._jid = myJID
         self._password = myPassword
@@ -184,36 +144,29 @@ class BasicJabberClient:
         self.showText = None
         self.statusText = ''
         self.priority = 0
-
-    #def register(self, observer):
-    #    self.observers.append(observer)
-
-    #def unregister(self, observer):
-    #    self.observers.remove(observer)
+    
+    def _rawDataIn(self, data):
+        self.dispatch(data, '//event/RAW_DATA_IN')
+        
+    def _rawDataOut(self, data):
+        self.dispatch(data, '//event/RAW_DATA_OUT')
 
     def streamAuthenticated(self, xmlstream):
         self._xmlstream = xmlstream
-        #for o in self.observers:
-        #    o.addObservers(self._xmlstream)
-        self._xmlstream.addObserver('/message', self.gotMessage)
+        self._xmlstream.rawDataInFn = self._rawDataIn
+        self._xmlstream.rawDataOutFn = self._rawDataOut
+        self._xmlstream.addObserver('/message', self.onMessage)
         self._xmlstream.addObserver("/iq[@type='error']", self.onIqError)
-        
-        # observers for iq get/set - other classes should use hook_iq_get/hook_iq_set
         self._xmlstream.addObserver("/iq[@type='get']", self.onIqGet)
         self._xmlstream.addObserver("/iq[@type='set']", self.onIqSet)
-        
-        #self._xmlstream.addObserver(xpaths.PRESENCE_SUBSCRIBE, self.onSubscribe)
-        #self._xmlstream.addObserver(xpaths.PRESENCE_UNSUBSCRIBE, self.onUnSubscribe)
-        #self._xmlstream.addObserver(STREAM_INITIATE_FILETRANSFER_START, self.onFileTransfer)
-        self.setStatus(statusText="Online")
 
+        self.setStatus(statusText="Online")
 
     def onIqGet(self, iq):
         noMatch = True
-        log.msg("iq_get")
         if iq.firstChildElement():
             elem = iq.firstChildElement()
-            noMatch = not self.iq_get_hooks.notifyEvent(elem, iq)
+            noMatch = not self.iq_get_hooks.dispatch( iq )
         if noMatch:
             log.msg("Unsupported IQ.GET: " + iq.toXml())
             elem = iq.firstChildElement() or iq
@@ -228,7 +181,7 @@ class BasicJabberClient:
         noMatch = True
         if iq.firstChildElement():
             elem = iq.firstChildElement()
-            noMatch = not self.iq_set_hooks.notifyEvent(elem, iq)
+            noMatch = not self.iq_set_hooks.dispatch( iq )
         if noMatch:
             log.msg("Unsupported IQ.SET: " + iq.toXml())
             elem = iq.firstChildElement() or iq
@@ -246,7 +199,7 @@ class BasicJabberClient:
     def tlsFailed(self, xmlstream): pass
 
     def onIqError(self, iq):
-        log.err("HERE'S AN ERROR: " + iq.toXml())
+        log.err("ERROR: " + iq.toXml())
         pass
 
     def setStatus(self, statusText=None, showText=None, priority=None):
@@ -261,13 +214,12 @@ class BasicJabberClient:
         p = presenceStanza(status=self.statusText, show=self.showText, priority=self.priority)
         self._xmlstream.send(p)
 
-    def gotMessage(self, msg):
+    def onMessage(self, msg):
         "Called when we've received a message.. check our hooks list and call anyone interested"
-        self.message_hooks.notifyEvent(msg, msg)
+        self.message_hooks.dispatch(msg, '//event/RECEIVE')
 
     def sendMessage(self, to=None, body=None):
         self._xmlstream.send(messageStanza(to, body))
-
 
 class RosterJabberClient(BasicJabberClient):
     def __init__(self, myJID, myPassword, identity_type):
@@ -276,12 +228,12 @@ class RosterJabberClient(BasicJabberClient):
         
     def streamAuthenticated(self, xmlstream):
         BasicJabberClient.streamAuthenticated(self, xmlstream)
-
-        self.presence_hooks = EventHooks()
+        
+        self.presence_hooks = utility.EventDispatcher()
         self._xmlstream.addObserver('/presence', self.onPresence)
-        self.iq_set_hooks.addXPathHook("/*[@xmlns='jabber:iq:roster']", self.onRosterIq)
-        self.presence_hooks.addXPathHook(xpaths.PRESENCE_SUBSCRIBE, self.onSubscribe)
-        self.presence_hooks.addXPathHook(xpaths.PRESENCE_UNSUBSCRIBE, self.onUnSubscribe)
+        self.iq_set_hooks.addObserver("/*[@xmlns='jabber:iq:roster']", self.onRosterIq)
+        self.presence_hooks.addObserver(xpaths.PRESENCE_SUBSCRIBE, self.onSubscribe)
+        self.presence_hooks.addObserver(xpaths.PRESENCE_UNSUBSCRIBE, self.onUnSubscribe)
         # request roster
         iq = client.IQ(self._xmlstream, type='get')
         iq.addElement("query", "jabber:iq:roster")
@@ -289,15 +241,17 @@ class RosterJabberClient(BasicJabberClient):
         iq.send()
 
     def onReceiveRoster(self, iq):
-        log.msg("onReceiveRoster")
         pass
 
     def onRosterIq(self, iq):
-        log.msg("onRosterIq")
         pass
     
-    def onSubscribe(self, presence): pass
+    def onSubscribe(self, presence):
+        """Called when someone tries to subscribe to our presence (adds us to their roster)
+        Override this, and call self.allowSubscribe(presence) to permit this"""
+        pass
     def onUnSubscribe(self, presence):
+        """Called when someone removes us from their contact list. Default action is to remove them from ours"""
         self.contactUnsubscribed(presence)
     
     def allowSubscribe(self, presence):
@@ -340,8 +294,8 @@ class RosterJabberClient(BasicJabberClient):
                 self.onContactAvailable(p)
             else:
                 self.onContactStatusChange(p['from'], p)
-        self.presence_hooks.notifyEvent(p, p)
+        self.presence_hooks.dispatch(p)
 
-    def onContactUnavailable(self, p): pass
+    def onContactUnavailable(self,p): pass
     def onContactAvailable(self, p): pass
     def onContactStatusChange(self, jid, p): pass

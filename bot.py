@@ -10,14 +10,13 @@ from client import BasicJabberClient, RosterJabberClient
 from adhoc import *
 
 import xpaths, namespaces
-#import adhoc
 
 class BotMixIn:
     def initBot(self, private=True, whitelist=[]):
         self.private = private
         self._whitelist = whitelist
         #self.adhoc = adhoc.AdHocCommands(self, commands, self.whitelistMatch)
-        self.message_hooks.addHook(self.receiveMessage)
+        self.message_hooks.addObserver('//event/RECEIVE', self.receiveMessage)
         
     def whitelistMatch(self, testJID):
         "Check whether testJID is allowed to send commands to this bot"
@@ -32,7 +31,6 @@ class BotMixIn:
         return False
     
     def receiveMessage(self, msg):
-        log.msg("receivedMessage from %s" % msg['from'])
         cmdline = str(msg.body)
         jid_from = jid.internJID(msg['from'])
         if self.whitelistMatch(jid_from):
@@ -61,5 +59,4 @@ class RosterJabberBot(RosterJabberClient, BotMixIn):
         self.initBot(private=private, whitelist=whitelist)
     
     def onSubscribe(self, presence):
-        log.msg("onSubscribe")
         self.allowSubscribe(presence)

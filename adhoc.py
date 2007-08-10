@@ -6,7 +6,7 @@ import DataForms
 from utils import messageStanza
 
 namespaces.COMMANDS = 'http://jabber.org/protocol/commands'
-xpaths.EXECUTE_COMMAND = "/command[@xmlns='http://jabber.org/protocol/commands']"
+xpaths.EXECUTE_COMMAND = "/iq/command[@xmlns='http://jabber.org/protocol/commands']"
 
 def shellCommand(cmdline, env={}, path='.', reactor=None, errortoo=1):
     "Returns a function which executes a command, and sends the output back to the sending JID"
@@ -41,7 +41,7 @@ class AdHocCommands:
         self._entity = entity
         self._entity.disco.addNode(namespaces.COMMANDS, self)
         self._entity.disco.addFeature(namespaces.COMMANDS, self)
-        self._entity.iq_set_hooks.addXPathHook(xpaths.EXECUTE_COMMAND, self.onExecuteCommand)
+        self._entity.iq_set_hooks.addObserver(xpaths.EXECUTE_COMMAND, self.onExecuteCommand)
 
     def iteritems_for_jid(self, from_jid):
         "List commands available to a specific JID.. uses self.filterCommands if it's set"
