@@ -1,5 +1,9 @@
 import xpaths, namespaces
+from twisted.words.protocols.jabber import jid
+from twisted.internet import reactor
+from twisted.internet.utils import getProcessOutput
 import DataForms
+from utils import messageStanza
 
 namespaces.COMMANDS = 'http://jabber.org/protocol/commands'
 xpaths.EXECUTE_COMMAND = "/command[@xmlns='http://jabber.org/protocol/commands']"
@@ -41,11 +45,11 @@ class AdHocCommands:
 
     def iteritems_for_jid(self, from_jid):
         "List commands available to a specific JID.. uses self.filterCommands if it's set"
-        cmds = self.commands.copy()
-        if self.filterCommands:
-            cmds = self.filterCommands(cmds, from_jid)
+        cmds = self.commands #.copy()
+        #if self.filterCommands:
+        #    cmds = self.filterCommands(cmds, from_jid)
         for i in cmds:
-            yield {'node': i, 'name': self.commands[i].title}
+            yield {'node': i, 'name': self.commands.__title__(i)}
 
     def onExecuteCommand(self, iq):
         'Called when we receive a relevant iq'
@@ -57,7 +61,7 @@ class AdHocCommands:
             self._entity._xmlstream.send(messageStanza(iq['from'], "no such command"))
         cmd = self.commands[node]
         # call the function specified
-        newIq = cmd.function(self._entity._xmlstream, iq)
+        newIq = cmd(self._entity._xmlstream, iq)
         if newIq:
             # send the resulting iq back
             self._entity._xmlstream.send(newIq)
@@ -74,6 +78,7 @@ class CommandList:
     def __getitem__(self, key):
         if hasattr(self, key) and isinstance(getattr(self, key), CommandNode):
             return getattr(self, key).function
+        raise AttributeError
     def __setitem__(self, key, value):
         setattr(self, key, value)
     def __iter__(self):
@@ -86,4 +91,7 @@ class CommandList:
             if member[:2] == '__': continue
             if isinstance(getattr(self, member), CommandNode):
                 yield member, self[member]
-            
+    def __title__(self, key):
+        if hasattr(self, key) and isinstance(getattr(self, key), CommandNode):
+            return getattr(self, key).title
+        raise AttributeError
