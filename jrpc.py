@@ -34,6 +34,25 @@ def encode_params(parms, args):
     parms.addRawXml(m.dumps(args))
 
 class JRPCServer:
+    """
+    This class exports functions via jabber rpc.
+
+    To use:
+    class MyEntity(BasicJabberClient):
+        def __init__(self, ...):
+            BasicJabberClient.__init__(self, ...)
+            self.jrpc = JRPCServer(self)
+        def rpc_test(self, param1, param2):
+            return "it worked"
+        def rpc_testDefer(self, param):
+            d = defer.Deferred()
+            def f():
+                d.callback("it worked")
+            reactor.callLater(10, f)
+            return d
+
+    alternatively, stuff callables into <JRPCServer instance>.methods
+    """
     def __init__(self, entity):
         self.methods = {}
         self._entity = entity
@@ -66,7 +85,21 @@ class JRPCServer:
         defer.maybeDeferred(m, args).addCallback(respond)
 
 class JRPCServerProxy:
+    """
+    This class works much like python's own xmlrpclib.ServerProxy.
+
+    To use:
+    s = JRPCServerProxy(myEntity, 'rpcserver@jabber.server')
+    def callback(value):
+        print value
+    s.testMethod(1,2,3).addCallback(callback)
+    """
     def __init__(self, entity, rpc_jid):
+        """
+        entity - the jabber entity with which this instance is to be associated (uses entity's xmlstream to
+        send IQs)
+        rpc_jid - the JID of the JRPC server
+        """
         self._entity = entity
         self.rpcJid = rpc_jid
     def __getattr__(self, key):
