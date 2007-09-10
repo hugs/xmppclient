@@ -6,6 +6,7 @@ namespaces.JINGLE = 'http://www.xmpp.org/extensions/xep-0166.html#ns'
 namespaces.JINGLE_ICEUDP = 'http://www.xmpp.org/extensions/xep-0176.html#ns-udp'
 namespaces.JINGLE_TCETCP = 'http://www.xmpp.org/extensions/xep-0176.html#ns-tcp'
 namespaces.JINGLE_RAWUDP = 'http://www.xmpp.org/extensions/xep-0177.html#ns'
+namespaces.JINGLE_FT = 'http://www.xmpp.org/extensions/xep-xxxx.html#ns'
 
 def gen_jingle_action_xpath(act):
     return "/iq/*[@xmlns='%s'][action='%s']" % (namespaces.JINGLE, act)
@@ -54,6 +55,7 @@ class Jingle:
         self._entity.disco.addFeature(namespaces.JINGLE_RAWUDP)
         self._entity.disco.addFeature(namespaces.JINGLE_ICEUDP)
         self._entity.disco.addFeature(namespaces.JINGLE_ICEUDP)
+        self._entity.disco.addFeature(namespaces.JINGLE_FT)
     
     def onSessionInitiate(self, iq):
         "Called when someone wants to initiate a jingle session with us"

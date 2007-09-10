@@ -1,4 +1,4 @@
-from twisted.words.protocols.jabber import client
+from twisted.words.protocols.jabber import client, jid
 from twisted.words.protocols.jabber import xmlstream as jxml
 from twisted.words.xish.xpath import XPathQuery
 from twisted.words.xish import domish, utility
@@ -161,6 +161,7 @@ class BasicJabberClient(utility.EventDispatcher):
         self._xmlstream.addObserver("/iq[@type='set']", self.onIqSet)
 
         self.setStatus(statusText="Online")
+        self.dispatch('ok', '//event/CONNECTION_AUTHENTICATED')
 
     def onIqGet(self, iq):
         noMatch = True
@@ -224,7 +225,8 @@ class BasicJabberClient(utility.EventDispatcher):
 class RosterJabberClient(BasicJabberClient):
     def __init__(self, myJID, myPassword, identity_type):
         BasicJabberClient.__init__(self, myJID, myPassword, identity_type)
-        self.onlineContacts = []
+        self.onlineContacts = {}
+        self.rosterContacts = []
         
     def streamAuthenticated(self, xmlstream):
         BasicJabberClient.streamAuthenticated(self, xmlstream)
@@ -241,7 +243,9 @@ class RosterJabberClient(BasicJabberClient):
         iq.send()
 
     def onReceiveRoster(self, iq):
-        pass
+        items = iq.children[0].children
+        for i in items:
+            self.rosterContacts.append(i['jid'])
 
     def onRosterIq(self, iq):
         pass
@@ -267,6 +271,7 @@ class RosterJabberClient(BasicJabberClient):
         new_pre['to'] = presence['to']
         new_pre['type'] = 'subscribe'
         self._xmlstream.send(new_pre)
+        self.rosterContacts.append(presence['from']) # should probably wait til we receive confirmation
 
     def contactUnsubscribed(self, presence):
         "Call this from OnUnSubscribe to acknowledge and remove contact from our roster"
@@ -282,20 +287,28 @@ class RosterJabberClient(BasicJabberClient):
         query.item['jid'] = presence['to']
         query.item['subscription'] = 'remove'
         iq.send()
+        self.rosterContacts.remove(presence['to'])
+        if presence['to'] in self.onlineContacts:
+            del self.onlineContacts[presence['to']]
         
     def onPresence(self, p):
         if p.getAttribute('type') == 'unavailable':
-            if p['from'] in self.onlineContacts:
-                self.onlineContacts.remove(p['from'])
             self.onContactUnavailable(p)
         else:
-            if p['from'] not in self.onlineContacts:
-                self.onlineContacts.append(p['from'])
-                self.onContactAvailable(p)
-            else:
-                self.onContactStatusChange(p['from'], p)
+            self.onContactAvailable(p)
         self.presence_hooks.dispatch(p)
 
-    def onContactUnavailable(self,p): pass
-    def onContactAvailable(self, p): pass
+    def onContactUnavailable(self,p):
+        j = jid.internJID(p['from'])
+        c = self.onlineContacts.get(j.userhost(), [])
+        c.remove(j.resource)
+        if c == []:
+            del self.onlineContacts[j.userhost()]
+        else:
+            self.onlineContacts[j.userhost()] = c
+    def onContactAvailable(self, p):
+        j = jid.internJID(p['from'])
+        c = self.onlineContacts.get(j.userhost(), [])
+        c.append(j.resource)
+        self.onlineContacts[j.userhost()] = c
     def onContactStatusChange(self, jid, p): pass
