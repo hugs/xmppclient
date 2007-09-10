@@ -64,7 +64,7 @@ class Disco:
     def addNode(self, name, obj):
         self.nodes[name] = obj
 
-    def addFeature(self, name, obj):
+    def addFeature(self, name, obj=None):
         self._features.append(name)
 
 class FileSaver:
@@ -121,6 +121,18 @@ class IdleMixin:
         self.setStatus(showText='away')
     def extended_away(self):
         self.setStatus(showText='xa')
+
+# the following class is useful for when you're testing sending/receiving IQs
+# to yourself over the same xmlstream..
+# twisted's own IQ class fires callbacks as the inital IQ gets sent, and clears the callbacklist
+# so that the result IQ response causes an error
+class MyIQ(client.IQ):
+    def send(self, to=None):
+        if to != None:
+            self['to'] = to
+        if self['type'] in ('get', 'set'):
+            self._xmlstream.addOnetimeObserver("/iq[@id='%s'][@type!='%s']" % (self['id'], self['type']), self._resultEvent)
+        self._xmlstream.send(self)
 
 class BasicJabberClient(utility.EventDispatcher):
     def __init__(self, myJID, myPassword, identity_type):
@@ -221,6 +233,8 @@ class BasicJabberClient(utility.EventDispatcher):
 
     def sendMessage(self, to=None, body=None):
         self._xmlstream.send(messageStanza(to, body))
+    def getIQ(self, type="set"):
+        return MyIQ(self._xmlstream, type)
 
 class RosterJabberClient(BasicJabberClient):
     def __init__(self, myJID, myPassword, identity_type):
@@ -301,9 +315,9 @@ class RosterJabberClient(BasicJabberClient):
     def onContactUnavailable(self,p):
         j = jid.internJID(p['from'])
         c = self.onlineContacts.get(j.userhost(), [])
-        c.remove(j.resource)
+        if j.resource in c: c.remove(j.resource)
         if c == []:
-            del self.onlineContacts[j.userhost()]
+            if j.userhost() in self.onlineContacts: del self.onlineContacts[j.userhost()]
         else:
             self.onlineContacts[j.userhost()] = c
     def onContactAvailable(self, p):
