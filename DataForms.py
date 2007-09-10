@@ -2,6 +2,7 @@ from twisted.python import log
 from twisted.words.xish import domish
 
 class Field:
+    "Base class for different field types"
     fieldType = 'unknown'
     def postInit(self):
         pass
@@ -32,16 +33,33 @@ class Field:
                 f.addElement("value", None, self.value)
         return f
 
-class BooleanField(Field): fieldType = 'boolean'
-class FixedField(Field): fieldType = 'fixed'
-class HiddenField(Field): fieldType = 'hidden'
-class JidMultiField(Field): fieldType = 'jid-multi'
-class JidField(Field): fieldType = 'jid-multi'
-class TextMultiField(Field): fieldType = 'text-multi'
-class TextPrivateField(Field): fieldType = 'text-private'
-class TextField(Field): fieldType = 'text-single'
+class BooleanField(Field):
+    "A boolean field"
+    fieldType = 'boolean'
+class FixedField(Field):
+    "A fixed field"
+    fieldType = 'fixed'
+class HiddenField(Field):
+    "A hidden field"
+    fieldType = 'hidden'
+class JidMultiField(Field):
+    "A multi-jid field: stores one or more JIDs"
+    fieldType = 'jid-multi'
+class JidField(Field):
+    "A JID field: stores a JID"
+    fieldType = 'jid'
+class TextMultiField(Field):
+    "Multi-line text field"
+    fieldType = 'text-multi'
+class TextPrivateField(Field):
+    "Password type field"
+    fieldType = 'text-private'
+class TextField(Field):
+    "Single line text field"
+    fieldType = 'text-single'
 
 class ListField(Field):
+    "Base class for List fields"
     # don't use this class.. just a superclass
     def postInit(self):
         self.options = []
@@ -57,10 +75,15 @@ class ListField(Field):
         f.children.extend([o.getElement() for o in self.options])
         return f
 
-class ListMultiField(ListField): fieldType = 'list-multi'
-class ListSingleField(ListField): fieldType = 'list-single'
+class ListMultiField(ListField):
+    "Multi-select list field"
+    fieldType = 'list-multi'
+class ListSingleField(ListField):
+    "Single-select list field"
+    fieldType = 'list-single'
 
 class Option:
+    "Option for ListField subclasses"
     def __init__(self, value, label=None):
         self.value = value
         self.label = label
@@ -72,6 +95,9 @@ class Option:
         return opt
 
 class JabberForm:
+    """
+    Container for Field() objects
+    """
     def __init__(self, title=None, instructions=None):
         self.title = title
         self.instructions = instructions
@@ -90,9 +116,11 @@ class JabberForm:
         f.value = value
 
     def add(self, f):
+        "Add a field to this form"
         self._fields.append(f)
 
     def getElement(self):
+        "Represent this form as a domish XML structure"
         x = domish.Element(("jabber:x:data", "x"), attribs={'type': 'result'})
         if self.title:
             x.addElement("title", None, self.title)
@@ -102,12 +130,18 @@ class JabberForm:
         return x
 
     def toDict(self):
+        "Convert this form into a dict() object"
         result = {}
         for f in self._fields:
             result[f.name] = f.value
         return result
 
 class Wizard:
+    """
+    Container for JabberForm() objects
+
+    presents the user with a multi-page form wizard type thing
+    """
     def __init__(self):
         self.pages = []
         self.states = {}
@@ -133,7 +167,6 @@ class Wizard:
                     result[fieldElement['var']] = value
         return result
     def processIq(self, xmlstream, iq):
-        #log.msg("*** RECEIVED "+iq.toXml(), debug=1)
         sessionid = iq.command.getAttribute('sessionid')
         if sessionid == None:
             sessionid = self.getNewSessionId()
@@ -146,9 +179,7 @@ class Wizard:
             return None
         myState = self.states[sessionid]
         stage = myState['page']
-        #log.msg("*** SESSION:"+sessionid, debug=1)
         action = iq.command.getAttribute('action') or 'execute'
-        #log.msg("*** ACTION:"+action, debug=1)
         validActions = []
         ok = False
         if action == 'execute': # start the whole thing off
@@ -238,5 +269,6 @@ class Wizard:
         "Override this method to modify a form before it gets sent to the requester"
         pass
     def onComplete(self, xmlstream, jid, pages):
+        "Override this method to get called when the user clicks 'Finish'"
         pass
 

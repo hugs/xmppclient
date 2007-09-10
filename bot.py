@@ -12,6 +12,7 @@ from adhoc import *
 import xpaths, namespaces
 
 class BotMixIn:
+    "A mixin class you can combine with BasicJabberClient or RosterJabberClient"
     def initBot(self, private=True, whitelist=[]):
         self.private = private
         self._whitelist = whitelist
