@@ -131,8 +131,11 @@ class MyIQ(client.IQ):
         if to != None:
             self['to'] = to
         if self['type'] in ('get', 'set'):
-            self._xmlstream.addOnetimeObserver("/iq[@id='%s'][@type!='%s']" % (self['id'], self['type']), self._resultEvent)
+            #self._xmlstream.addOnetimeObserver("/iq[@id='%s'][@type!='%s']" % (self['id'], self['type']), self._resultEvent)
+            self._xmlstream.addOnetimeObserver("/iq[@id='%s']" % self['id'], self._resultEvent)
         self._xmlstream.send(self)
+    def _resultEvent(self, iq):
+        self.callbacks.callback(iq)
 
 class BasicJabberClient(utility.EventDispatcher):
     def __init__(self, myJID, myPassword, identity_type):
@@ -164,6 +167,7 @@ class BasicJabberClient(utility.EventDispatcher):
         self.dispatch(data, '//event/RAW_DATA_OUT')
 
     def streamAuthenticated(self, xmlstream):
+        log.msg("connection authenticated")
         self._xmlstream = xmlstream
         self._xmlstream.rawDataInFn = self._rawDataIn
         self._xmlstream.rawDataOutFn = self._rawDataOut
@@ -172,7 +176,7 @@ class BasicJabberClient(utility.EventDispatcher):
         self._xmlstream.addObserver("/iq[@type='get']", self.onIqGet)
         self._xmlstream.addObserver("/iq[@type='set']", self.onIqSet)
 
-        self.setStatus(statusText="Online")
+        #self.setStatus(statusText="Online")
         self.dispatch('ok', '//event/CONNECTION_AUTHENTICATED')
 
     def onIqGet(self, iq):
@@ -229,7 +233,10 @@ class BasicJabberClient(utility.EventDispatcher):
 
     def onMessage(self, msg):
         "Called when we've received a message.. check our hooks list and call anyone interested"
+        # alert callbacks waiting for any kind of message
         self.message_hooks.dispatch(msg, '//event/RECEIVE')
+        # alert callbacks with xpath selectors
+        self.message_hooks.dispatch( msg )
 
     def sendMessage(self, to=None, body=None):
         self._xmlstream.send(messageStanza(to, body))
@@ -250,6 +257,8 @@ class RosterJabberClient(BasicJabberClient):
         self.iq_set_hooks.addObserver("/*[@xmlns='jabber:iq:roster']", self.onRosterIq)
         self.presence_hooks.addObserver(xpaths.PRESENCE_SUBSCRIBE, self.onSubscribe)
         self.presence_hooks.addObserver(xpaths.PRESENCE_UNSUBSCRIBE, self.onUnSubscribe)
+
+        self.setStatus(statusText="Online")
         # request roster
         iq = client.IQ(self._xmlstream, type='get')
         iq.addElement("query", "jabber:iq:roster")
@@ -310,14 +319,22 @@ class RosterJabberClient(BasicJabberClient):
             self.onContactUnavailable(p)
         else:
             self.onContactAvailable(p)
+            if p.show:
+                self.dispatch((p['from'], p.show.__str__()), '//event/CONTACT_SHOW')
+            else:
+                self.dispatch((p['from'], 'online'), '//event/CONTACT_SHOW')
         self.presence_hooks.dispatch(p)
 
     def onContactUnavailable(self,p):
         j = jid.internJID(p['from'])
         c = self.onlineContacts.get(j.userhost(), [])
-        if j.resource in c: c.remove(j.resource)
+        if j.resource in c:
+            c.remove(j.resource)
+            self.dispatch(j, '//event/RESOURCE_UNAVAILABLE')
         if c == []:
-            if j.userhost() in self.onlineContacts: del self.onlineContacts[j.userhost()]
+            if j.userhost() in self.onlineContacts:
+                del self.onlineContacts[j.userhost()]
+                self.dispatch(j.userhost(), '//event/CONTACT_UNAVAILABLE')
         else:
             self.onlineContacts[j.userhost()] = c
     def onContactAvailable(self, p):
@@ -325,4 +342,9 @@ class RosterJabberClient(BasicJabberClient):
         c = self.onlineContacts.get(j.userhost(), [])
         c.append(j.resource)
         self.onlineContacts[j.userhost()] = c
-    def onContactStatusChange(self, jid, p): pass
+        if len(c) == 1:
+            self.dispatch(j.userhost(), '//event/CONTACT_AVAILABLE')
+        self.dispatch(j, '//event/RESOURCE_AVAILABLE')
+    def onContactStatusChange(self, jid, p):
+        self.dispatch((jid, p), '//event/CONTACT_STATUS_CHANGE')
+        pass
