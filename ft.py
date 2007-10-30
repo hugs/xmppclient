@@ -53,7 +53,7 @@ class StreamInitiation:
     def __init__(self, entity):
         self._entity = entity
         self._entity.disco.addFeature('http://jabber.org/protocol/si', self)
-        self._entity.iq_set_hooks.addXPathHook("/si[@xmlns='http://jabber.org/protocol/si']", self.onStreamInitiateRequest)
+        self._entity.iq_set_hooks.addObserver("/si[@xmlns='http://jabber.org/protocol/si']", self.onStreamInitiateRequest)
         self.streamProfiles = {}
     def onStreamInitiateRequest(self, iq):
         log.msg("onStreamInitiateRequest")
@@ -97,7 +97,7 @@ class FileTransfer:
         #self._entity.hook_iq_set("/si[@xmlns='http://jabber.org/protocol/si'][@profile='http://jabber.org/protocol/si/profile/file-transfer']", self.onFileTransfer)
         self._si.addStreamProfile('http://jabber.org/protocol/si/profile/file-transfer', self.onFileTransfer)
 
-        self._entity.iq_set_hooks.addXPathHook("/query[@xmlns='http://jabber.org/protocol/bytestreams']", self.onByteStreamInitiate)
+        self._entity.iq_set_hooks.addObserver("/query[@xmlns='http://jabber.org/protocol/bytestreams']", self.onByteStreamInitiate)
 
         self.sessions = {}
 
