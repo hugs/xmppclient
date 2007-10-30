@@ -5,6 +5,14 @@ import socket
 import random
 import struct, md5
 
+"""
+s = STUN()
+reactor.listenUDP(0,s)
+def found( (addr, port) )
+    print "%s:%s" % (addr, port)
+s.request('stunserver.org').addCallback(found)
+"""
+
 BINDING_REQUEST  = 0x0001
 BINDING_RESPONSE = 0x0101
 BINDING_ERROR    = 0x0111
@@ -32,6 +40,9 @@ def dump(data):
         print ' '.join(['%02X' % ord(x) for x in list(data[p:p+16])])
 
 class STUN(DatagramProtocol):
+    """
+    Basic (incomplete) STUN implementation. Works for simple cases though
+    """
     state = STATE_UNREADY
     def getBindingRequest(self):
         random.seed(time.time())
