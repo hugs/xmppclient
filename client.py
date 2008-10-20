@@ -346,7 +346,13 @@ class RosterJabberClient(BasicJabberClient):
     def onContactAvailable(self, p):
         j = jid.internJID(p['from'])
         c = self.onlineContacts.get(j.userhost(), [])
-        c.append(j.resource)
+        # JRH - Sauce Labs - Bug fix - The list of xmpp resources were
+        # growing in size on every update for the contact. Now, we only 
+        # add to the list if it's not already in the list.
+        if j.resource not in c:
+            c.append(j.resource)
+        # JRH - end
+
         self.onlineContacts[j.userhost()] = c
         if len(c) == 1:
             self.dispatch(j.userhost(), '//event/CONTACT_AVAILABLE')
