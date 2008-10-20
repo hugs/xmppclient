@@ -325,10 +325,19 @@ class RosterJabberClient(BasicJabberClient):
             self.onContactUnavailable(p)
         else:
             self.onContactAvailable(p)
-            if p.show:
-                self.dispatch((p['from'], p.show.__str__()), '//event/CONTACT_SHOW')
+            # JRH - Sauce Labs - enhancement
+            # Send the status description text allow 
+            # with 'show' value (e.g. 'online', 'away', etc.)
+            if p.status:
+                status = p.status.__str__()
             else:
-                self.dispatch((p['from'], 'online'), '//event/CONTACT_SHOW')
+                status = ''
+                
+            if p.show:
+                self.dispatch((p['from'], p.show.__str__(), status), '//event/CONTACT_SHOW')
+            else:
+                self.dispatch((p['from'], 'online', status), '//event/CONTACT_SHOW')
+            # JRH - end
         self.presence_hooks.dispatch(p)
 
     def onContactUnavailable(self,p):
