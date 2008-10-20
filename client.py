@@ -266,6 +266,12 @@ class RosterJabberClient(BasicJabberClient):
         iq.send()
 
     def onReceiveRoster(self, iq):
+        # JRH - Sauce Labs - Bug fix - rosters were not being reset properly.
+        # If a new copy of the entire roster was resent by the server,
+        # the list should be reset to zero before  adding to it.
+        self.rosterContacts = []
+        # JRH - end
+
         items = iq.children[0].children
         for i in items:
             self.rosterContacts.append(i['jid'])
