@@ -275,6 +275,7 @@ class RosterJabberClient(BasicJabberClient):
         items = iq.children[0].children
         for i in items:
             self.rosterContacts.append(i['jid'])
+        self.dispatch((),'//event/ROSTER')
 
     def onRosterIq(self, iq):
         pass
