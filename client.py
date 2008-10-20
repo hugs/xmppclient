@@ -327,7 +327,7 @@ class RosterJabberClient(BasicJabberClient):
         else:
             self.onContactAvailable(p)
             # JRH - Sauce Labs - enhancement
-            # Send the status description text allow 
+            # Send the status description text along 
             # with 'show' value (e.g. 'online', 'away', etc.)
             if p.status:
                 status = p.status.__str__()
